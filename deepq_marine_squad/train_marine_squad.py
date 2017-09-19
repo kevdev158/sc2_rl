@@ -36,7 +36,7 @@ def main():
             env=env,
             q_func=model,
             num_actions=14,
-            max_num_episodes=500,
+            max_num_episodes=180,
             saved_model_path=os.path.join("saved_models", "my_model"),
             continue_model=True,
             lr=2.5e-4,

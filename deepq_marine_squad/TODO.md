@@ -1,2 +1,1 @@
-- Check if saving and restoring the model works
-- Add `target_closest_enemy` action to target closest enemy
+- Implement own DeepQ algorithm

@@ -232,7 +232,7 @@ class MarineSquad:
             x, y = self.select_unit_loc
             y = max(_MIN_RES, y - int(_MOVE_SCREEN))
             self.select_unit_loc = (x, y)
-            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x,y)])
+            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x, y)])
         else:
             action = sc2_actions.FunctionCall(_NO_OP, [])
 
@@ -243,7 +243,7 @@ class MarineSquad:
             x, y = self.select_unit_loc
             y = min(_MAX_RES, y + int(_MOVE_SCREEN))
             self.select_unit_loc = (x, y)
-            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x,y)])
+            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x, y)])
         else:
             action = sc2_actions.FunctionCall(_NO_OP, [])
 
@@ -254,7 +254,7 @@ class MarineSquad:
             x, y = self.select_unit_loc
             x = max(_MIN_RES, x - int(_MOVE_SCREEN))
             self.select_unit_loc = (x, y)
-            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x,y)])
+            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x, y)])
         else:
             action = sc2_actions.FunctionCall(_NO_OP, [])
 
@@ -265,7 +265,7 @@ class MarineSquad:
             x, y = self.select_unit_loc
             x = min(_MAX_RES, x + int(_MOVE_SCREEN))
             self.select_unit_loc = (x, y)
-            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x,y)])
+            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, (x, y)])
         else:
             action = sc2_actions.FunctionCall(_NO_OP, [])
 
@@ -277,7 +277,19 @@ class MarineSquad:
             unit_hp = obs.observation["screen"][_UNIT_HP]
             enemy_y, enemy_x = (player_relative == _PLAYER_HOSTILE).nonzero()
             enemy_ind = np.argmin(unit_hp[enemy_y, enemy_x])
-            target = (enemy_y[enemy_ind], enemy_x[enemy_ind])
+            target = (enemy_x[enemy_ind], enemy_y[enemy_ind])
+            action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, target])
+        else:
+            action = sc2_actions.FunctionCall(_NO_OP, [])
+
+        return action
+
+    def attack_closest_enemy(self, obs):
+        if _ATTACK_SCREEN in obs.observation["available_actions"]:
+            player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
+            enemy_pos = (player_relative == _PLAYER_HOSTILE).nonzero()
+            unit_pos = np.array(self.select_unit_loc)
+            target = enemy_pos[np.argmin(np.linalg.norm(enemy_pos - unit_pos))]
             action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, target])
         else:
             action = sc2_actions.FunctionCall(_NO_OP, [])
