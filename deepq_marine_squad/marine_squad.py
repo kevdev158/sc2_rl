@@ -69,11 +69,13 @@ _SELECT_POINT_TOGGLE = 1
 
 _TERRAN_MARINE = 48
 
-_MIN_RES = 0
+_MIN_RES = 0  # Pixel resolution
 _MAX_RES = 63
-_MOVE_STEP_SIZE = 4
+_MOVE_STEP_SIZE = 4  # How many pixels to move the marines
 
 FLAGS = flags.FLAGS
+# TODO: Add "spread" army as an action
+# Sorta cheating since it must learn how to position the marines
 
 
 class MarineSquad:
@@ -109,9 +111,11 @@ class MarineSquad:
             elif action_id == 12:
                 action = self.attack_lowest_hp(obs)
             elif action_id == 13:
+                action = self.attack_closest_enemy(obs)
+            elif action_id == 14:
                 action = sc2_actions.FunctionCall(_NO_OP, [])
         except Exception as e:
-            # print(e)
+            print(e)
             action = sc2_actions.FunctionCall(_NO_OP, [])
 
         return [action]
@@ -288,8 +292,12 @@ class MarineSquad:
         if _ATTACK_SCREEN in obs.observation["available_actions"]:
             player_relative = obs.observation["screen"][_PLAYER_RELATIVE]
             enemy_pos = (player_relative == _PLAYER_HOSTILE).nonzero()
-            unit_pos = np.array(self.select_unit_loc)
-            target = enemy_pos[np.argmin(np.linalg.norm(enemy_pos - unit_pos))]
+            unit_pos = self.select_unit_loc
+            # enemy_pos is (y, x), so have unit_pos be (y, x) as well
+            unit_pos = np.array([unit_pos[1], unit_pos[0]]).reshape((2, 1))
+            ind = np.argmin(np.linalg.norm(enemy_pos - unit_pos))
+            # computed using (y, x), need to flip it for function call which takes (x,y)
+            target = (enemy_pos[1][ind], enemy_pos[0][ind])
             action = sc2_actions.FunctionCall(_ATTACK_SCREEN, [_NOT_QUEUED, target])
         else:
             action = sc2_actions.FunctionCall(_NO_OP, [])

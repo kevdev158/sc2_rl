@@ -168,9 +168,7 @@ def learn(env,
     screen_observations = obs[0].observation["screen"][[_PLAYER_RELATIVE, _UNIT_HP, _UNIT_TYPE, _SELECTED]]
 
     reset = True
-    # with tempfile.TemporaryDirectory() as td:
     model_saved = False
-    #model_file = os.path.join(td, "model")
     model_file = saved_model_path
 
     for t in range(max_timesteps):
@@ -201,13 +199,13 @@ def learn(env,
 
         exec_action = marine_squad.select_action(obs[0], action_id=action)
 
-        # Take an action
+        # Execute action
         obs = env.step(actions=exec_action)
 
         done = (obs[0].step_type == environment.StepType.LAST)
 
         if obs[0].observation["player"][_SUPPLY_USED] <= 0:
-            # Weird error where the environment does not stop when all units dead
+            # Weird bug where the environment does not stop when all units are dead
             done = environment.StepType.LAST
 
         rew = obs[0].reward
@@ -265,7 +263,6 @@ def learn(env,
                 saved_mean_reward = mean_100ep_reward
 
         if num_episodes >= max_num_episodes:
-            #U.load_state(model_file)
             U.save_state(model_file)
             return ActWrapper(act, act_params)
 
