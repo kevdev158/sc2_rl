@@ -1,5 +1,5 @@
 import numpy as np
-import os
+import os, sys
 import dill
 import tempfile
 import tensorflow as tf
@@ -20,6 +20,7 @@ from pysc2.lib import features
 from pysc2.lib import actions
 
 from marine_squad import MarineSquad
+import my_utils
 
 import gflags as flags
 
@@ -64,6 +65,7 @@ _SUPPLY_USED = 3
 
 FLAGS = flags.FLAGS
 
+_USED_SCREEN_FEATURES = [_PLAYER_RELATIVE, _UNIT_HP, _UNIT_TYPE, _SELECTED]
 
 def load(path, num_cpu=16):
   """Load act function that was returned by learn function.
@@ -118,7 +120,7 @@ def learn(env,
 
     def make_obs_ph(name):
         # Shape of observation space
-        return U.BatchInput((4, 64, 64), name=name)
+        return U.BatchInput((my_utils.get_screen_channel_size(used_features=_USED_SCREEN_FEATURES), 64, 64), name=name)
 
     act, train, update_target, debug = deepq.build_train(
         make_obs_ph=make_obs_ph,
@@ -165,7 +167,11 @@ def learn(env,
     marine_squad = MarineSquad()
 
     # Get all relevant observations
-    screen_observations = obs[0].observation["screen"][[_PLAYER_RELATIVE, _UNIT_HP, _UNIT_TYPE, _SELECTED]]
+    screen_observations = obs[0].observation["screen"][_USED_SCREEN_FEATURES]
+    screen_observations = my_utils.preprocess_screen(screen=screen_observations,
+                                                     used_features=_USED_SCREEN_FEATURES)
+
+    # print("SHAPE: ", screen_observations.shape)
 
     reset = True
     model_saved = False
@@ -209,7 +215,9 @@ def learn(env,
             done = environment.StepType.LAST
 
         rew = obs[0].reward
-        new_screen_observations = obs[0].observation["screen"][[_PLAYER_RELATIVE, _UNIT_HP, _UNIT_TYPE, _SELECTED]]
+        new_screen_observations = obs[0].observation["screen"][_USED_SCREEN_FEATURES]
+        new_screen_observations = my_utils.preprocess_screen(screen=new_screen_observations,
+                                                             used_features=_USED_SCREEN_FEATURES)
 
         # Save to replay buffer (s,a,r,s')
         replay_buffer.add(screen_observations, action, rew, new_screen_observations, float(done))
@@ -219,9 +227,12 @@ def learn(env,
         screen_observations = new_screen_observations
 
         if done:
+            # Reset
             print("Episode Reward: %s" % episode_rewards[-1])
             obs = env.reset()
-            screen_observations = obs[0].observation["screen"][[_PLAYER_RELATIVE, _UNIT_HP, _UNIT_TYPE, _SELECTED]]
+            screen_observations = obs[0].observation["screen"][_USED_SCREEN_FEATURES]
+            screen_observations = my_utils.preprocess_screen(screen=screen_observations,
+                                                             used_features=_USED_SCREEN_FEATURES)
             marine_squad = MarineSquad()
             episode_rewards.append(0.0)
             reset = True
