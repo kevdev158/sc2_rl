@@ -1,4 +1,5 @@
 import os
+import numpy as np
 
 import gflags as flags
 
@@ -45,12 +46,23 @@ _PLAYER_ALLY = 2
 _PLAYER_NEUTRAL = 3
 _PLAYER_HOSTILE = 4
 
+_USED_SCREEN_FEATURES = [_PLAYER_RELATIVE, _UNIT_HP, _UNIT_TYPE,
+                         _SELECTED, _VISIBILITY]
+
+_USED_MINIMAP_FEATURES = [_MMAP_VISIBILITY, _MMAP_CAMERA, _MMAP_PLAYER_RELATIVE,
+                          _MMAP_PLAYER_ID, _MMAP_SELECTED]
+
+
 class ReplayPipeline:
-    def __init__(self, replay_path, run_config, replay_cache):
+    def __init__(self, replay_path, run_config, interface, replay_cache,
+                 max_episode_steps=9600, batch_size=32):
         self.replay_path = replay_path
         self.run_config = run_config
+        self.interface = interface
         self.replay_cache = replay_cache
-        self.replay_meta = {}  # Try to log races, map, results
+        self.replay_meta = {}  # Try to log races, map, results of a replay
+        self.max_episode_steps = max_episode_steps
+        self.batch_size = batch_size
 
     @staticmethod
     def valid_replay(info, ping):
@@ -68,8 +80,7 @@ class ReplayPipeline:
                 return False
         return True
 
-    def setup_replay(self):
-        #TODO: need a function to expose parts to model
+    def process_replay(self):
         try:
             with self.run_config.start() as controller:
                 ping = controller.ping()
@@ -87,7 +98,7 @@ class ReplayPipeline:
                             if info.local_map_path:
                                 map_data = self.run_config.map_data(info.local_map_path)
                             for player_id in [1, 2]:
-                                self.process_replay(controller, replay_data,
+                                self.__process_replay(controller, replay_data,
                                                     map_data, player_id)
                         else:
                             print("Replay is invalid")
@@ -98,22 +109,63 @@ class ReplayPipeline:
         except KeyboardInterrupt:
             return
 
-
-
-    def process_replay(self, controller, replay_data, map_data, player_id):
+    def __process_replay(self, controller, replay_data, map_data, player_id):
         controller.start_replay(sc_pb.RequestStartReplay(
             replay_data=replay_data,
             map_data=map_data,
-            options=interface,
+            options=self.interface,
             observed_player_id=player_id
         ))
 
         feat = features.Features(controller.game_info())
         controller.step()
 
-        # Get rid of this while loop -- too sleepy
-        while True:
+        for _ in range(0,self.max_episode_steps,FLAGS.step_mul):
             obs = controller.observe
+
+            screen_batch = []
+            minimap_batch = []
+            general_batch = []
+            action_batch = []
+            for i in range(self.batch_size):
+                # Observations and actions seen at some step
+                feature_obs = feat.transform_obs(obs.observation)
+                screen = feature_obs["screen"][_USED_SCREEN_FEATURES]
+                minimap = feature_obs["minimap"][_USED_MINIMAP_FEATURES]
+                general = feature_obs["general"][:8]
+
+                screen_batch.append(screen)
+                minimap_batch.append(minimap)
+                general_batch.append(general)
+
+                player_actions = []
+                for action in obs.action:
+                    feature_action = feat.reverse_action(action)
+                    action_function = feature_action.function
+                    action_args = feature_action.arguments
+                    player_actions.append((action_function, action_args))
+
+                action_batch.append(player_actions)
+
+                if obs.player_result:
+                    break
+
+                controller.step(FLAGS.step_mul)
+
+            screen_batch = np.array(screen_batch)
+            minimap_batch = np.array(minimap_batch)
+            general_batch = np.array(general_batch)
+
+            # Do something with batches
+            print("Screen batch size: ", screen_batch.shape)
+            print("Minimap batch size: ", minimap_batch.shape)
+            print("General batch size: ", general_batch.shape)
+            print("Action batch size: ", len(action_batch))
+
+            break
+
+            if obs.player_result:
+                break
 
 
 
@@ -130,12 +182,11 @@ def main(unused_argv):
     replay_list = [run_config.replay_paths(FLAGS.replays)]
 
     # maximum number of steps per replay -- sample first ten minutes
-    max_episode_steps = 9600  # step size is 8
-    batch_size = 40  # last five seconds
     replay_cache = []  # Should be an array of size -1 * 64 * 64 * features used
     for replay_path in replay_list:
         replay_pipeline = ReplayPipeline(replay_path=replay_path,
                                          run_config=run_config,
+                                         interface=interface,
                                          replay_cache=replay_cache)
         replay_pipeline.process_replay()
 
